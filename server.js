@@ -1,4 +1,4 @@
-const express = require('express');
+      const express = require('express');
 const bodyParser = require('body-parser');
 const { chromium } = require('playwright');
 
@@ -23,6 +23,18 @@ async function ensurePage() {
   return page;
 }
 
+// Helper: get all forms on the page
+async function getAllFormsHTML(page) {
+  const forms = await page.$$eval('form', forms =>
+    forms.map(f => ({
+      id: f.id || null,
+      name: f.name || null,
+      html: f.outerHTML
+    }))
+  );
+  return forms;
+}
+
 // Start browser manually (optional)
 app.post('/start-browser', async (req, res) => {
   try {
@@ -33,21 +45,27 @@ app.post('/start-browser', async (req, res) => {
   }
 });
 
-// Navigate to a URL
+// Navigate to a URL and return <body> + forms
 app.post('/navigate', async (req, res) => {
   const { url } = req.body;
   try {
     const page = await ensurePage();
     await page.goto(url, { waitUntil: 'domcontentloaded' });
 
-    const html = await page.content();
-    res.json({ message: `Navigated to ${url}`, dom: html });
+    const bodyHTML = await page.$eval('body', el => el.outerHTML);
+    const forms = await getAllFormsHTML(page);
+
+    res.json({
+      message: `Navigated to ${url}`,
+      body: bodyHTML,
+      forms: forms
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Perform actions on the page
+// Perform actions on the page and return <body> + forms
 app.post('/action', async (req, res) => {
   const { selector, action, value } = req.body;
 
@@ -77,8 +95,14 @@ app.post('/action', async (req, res) => {
       return res.status(400).json({ error: 'Unsupported action' });
     }
 
-    const html = await page.content();
-    res.json({ message: `${action} performed on ${selector}`, dom: html });
+    const bodyHTML = await page.$eval('body', el => el.outerHTML);
+    const forms = await getAllFormsHTML(page);
+
+    res.json({
+      message: `${action} performed on ${selector}`,
+      body: bodyHTML,
+      forms: forms
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
